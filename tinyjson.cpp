@@ -139,6 +139,9 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
       if (json[i] == ',') {
         i += 1;
         skip_whitespace(i);
+        if (i >= json.size() || json[i] == ']') {
+          return {JSONObject{std::nullptr_t{}}, 0};
+        }
         continue;
       }
 
@@ -199,6 +202,9 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
       if (json[i] == ',') {
         i += 1;
         skip_whitespace(i);
+        if (i >= json.size() || json[i] == '}') {
+          return {JSONObject{std::nullptr_t{}}, 0};
+        }
         continue;
       }
 
