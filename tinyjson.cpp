@@ -12,6 +12,14 @@
 #include <vector>
 
 namespace tinyjson {
+namespace {
+
+bool is_json_whitespace(char ch) {
+  return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+}
+
+} // namespace
+
 std::pair<JSONObject, size_t> parse(std::string_view json) {
   // Parse empty
   if (json.empty()) {
@@ -19,8 +27,11 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
   }
 
   // Exclude leading escape characters
-  if (size_t off = json.find_first_not_of(" \n\r\t\v\f\0");
-      off != 0 && off != json.npos) {
+  size_t off = 0;
+  while (off < json.size() && is_json_whitespace(json[off])) {
+    ++off;
+  }
+  if (off != 0) {
     auto [obj, eaten] = parse(json.substr(off));
     return {std::move(obj), eaten + off};
   }
@@ -96,8 +107,7 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
   }
 
   auto skip_whitespace = [&json](size_t &i) {
-    while (i < json.size() &&
-           std::isspace(static_cast<unsigned char>(json[i]))) {
+    while (i < json.size() && is_json_whitespace(json[i])) {
       ++i;
     }
   };
