@@ -39,16 +39,12 @@ template <class T>
 void print_value(std::vector<T> const &list, std::size_t indent) {
   std::cout << '[';
   if (!list.empty()) {
-    std::cout << '\n';
     for (std::size_t i = 0; i < list.size(); ++i) {
-      write_indent(indent + 2);
-      print_impl(list[i], indent + 2);
+      print_impl(list[i], indent);
       if (i + 1 != list.size()) {
-        std::cout << ',';
+        std::cout << ", ";
       }
-      std::cout << '\n';
     }
-    write_indent(indent);
   }
   std::cout << ']';
 }
