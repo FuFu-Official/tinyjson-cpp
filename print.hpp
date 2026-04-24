@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace tinyjson {
+namespace print_detail {
 
 template <class T> struct always_false : std::false_type {};
 
@@ -94,14 +95,15 @@ template <class T> void print_impl(T const &value, std::size_t indent) {
 template <class T> void print_value(T const &, std::size_t) {
   static_assert(always_false<T>::value, "print(): unsupported type");
 }
-
-} // namespace tinyjson
+} // namespace print_detail
 
 template <typename T> void print(T const &value) {
-  tinyjson::print_impl(value, 0);
+  print_detail::print_impl(value, 0);
 }
 
 template <typename T> void printnl(T const &value) {
   print(value);
   std::cout << '\n';
 }
+
+} // namespace tinyjson
