@@ -17,7 +17,7 @@ using JSONDICT = std::unordered_map<std::string, JSONObject>;
 using JSONLIST = std::vector<JSONObject>;
 
 struct JSONObject {
-  std::variant<std::nullptr_t, // none
+  std::variant<std::nullptr_t, // null
                bool,           // true & false
                int,            // 3
                double,         // 3,14
