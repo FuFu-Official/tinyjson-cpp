@@ -64,6 +64,7 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
   if (json[0] == '"') {
     std::string str;
     enum { Raw, Esc } phase = Raw;
+    bool closed = false;
 
     size_t i = 1;
     for (; i < json.size(); ++i) {
@@ -74,6 +75,7 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
           continue;
         } else if (ch == '"') {
           i++;
+          closed = true;
           break;
         } else {
           str += ch;
@@ -84,6 +86,10 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
         str += unescaped_char(ch);
         phase = Raw;
       }
+    }
+
+    if (!closed) {
+      return {JSONObject{std::nullptr_t{}}, 0};
     }
 
     return {JSONObject{std::move(str)}, i};
@@ -99,70 +105,106 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
   // Parse list
   if (json[0] == '[') {
     std::vector<JSONObject> res;
-    size_t i;
-    for (i = 1; i < json.size();) {
-      if (json[i] == ']') {
-        i += 1;
-        break;
-      }
+    size_t i = 1;
+    bool closed = false;
+
+    skip_whitespace(i);
+    if (i < json.size() && json[i] == ']') {
+      return {JSONObject{std::move(res)}, i + 1};
+    }
+
+    for (; i < json.size();) {
       auto [obj, eaten] = parse(json.substr(i));
       if (eaten == 0) {
-        i = 0;
-        break;
+        return {JSONObject{std::nullptr_t{}}, 0};
       }
       res.push_back(std::move(obj));
       i += eaten;
 
       skip_whitespace(i);
+      if (i >= json.size()) {
+        return {JSONObject{std::nullptr_t{}}, 0};
+      }
+
       if (json[i] == ',') {
         i += 1;
+        skip_whitespace(i);
+        continue;
       }
-      skip_whitespace(i);
+
+      if (json[i] == ']') {
+        i += 1;
+        closed = true;
+        break;
+      }
+
+      return {JSONObject{std::nullptr_t{}}, 0};
     }
+
+    if (!closed) {
+      return {JSONObject{std::nullptr_t{}}, 0};
+    }
+
     return {JSONObject{std::move(res)}, i};
   }
 
   // Parse dict
   if (json[0] == '{') {
     std::unordered_map<std::string, JSONObject> res;
-    size_t i;
-    for (i = 1; i < json.size();) {
-      if (json[i] == '}') {
-        i += 1;
-        break;
-      }
+    size_t i = 1;
+    bool closed = false;
+
+    skip_whitespace(i);
+    if (i < json.size() && json[i] == '}') {
+      return {JSONObject{std::move(res)}, i + 1};
+    }
+
+    for (; i < json.size();) {
       auto [keyobj, keyeaten] = parse(json.substr(i));
-      if (keyeaten == 0) {
-        i = 0;
-        break;
+      if (keyeaten == 0 || !std::holds_alternative<std::string>(keyobj.inner)) {
+        return {JSONObject{std::nullptr_t{}}, 0};
       }
       i += keyeaten;
-      if (!std::holds_alternative<std::string>(keyobj.inner)) {
-        i = 0;
-        break;
-      }
 
       skip_whitespace(i);
-      if (json[i] == ':') {
-        i += 1;
+      if (i >= json.size() || json[i] != ':') {
+        return {JSONObject{std::nullptr_t{}}, 0};
       }
+      i += 1;
       skip_whitespace(i);
 
       std::string key = std::move(std::get<std::string>(keyobj.inner));
       auto [valobj, valeaten] = parse(json.substr(i));
       if (valeaten == 0) {
-        i = 0;
-        break;
+        return {JSONObject{std::nullptr_t{}}, 0};
       }
       i += valeaten;
       res.try_emplace(std::move(key), std::move(valobj));
 
       skip_whitespace(i);
+      if (i >= json.size()) {
+        return {JSONObject{std::nullptr_t{}}, 0};
+      }
+
       if (json[i] == ',') {
         i += 1;
+        skip_whitespace(i);
+        continue;
       }
-      skip_whitespace(i);
+
+      if (json[i] == '}') {
+        i += 1;
+        closed = true;
+        break;
+      }
+
+      return {JSONObject{std::nullptr_t{}}, 0};
     }
+
+    if (!closed) {
+      return {JSONObject{std::nullptr_t{}}, 0};
+    }
+
     return {JSONObject{std::move(res)}, i};
   }
 
