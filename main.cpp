@@ -1,6 +1,7 @@
 #include "CLI11.hpp"
 #include "tinyjson.hpp"
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -27,7 +28,21 @@ int main(int argc, char **argv) {
                     std::istreambuf_iterator<char>());
   }
 
-  tinyjson::JSONObject obj = tinyjson::parse(raw_json).first;
+  auto [obj, eaten] = tinyjson::parse(raw_json);
+  auto is_json_whitespace = [](char ch) {
+    return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
+  };
+
+  std::size_t i = eaten;
+  while (i < raw_json.size() && is_json_whitespace(raw_json[i])) {
+    ++i;
+  }
+
+  if (eaten == 0 || i != raw_json.size()) {
+    std::cerr << "Invalid JSON format.";
+    return -1;
+  }
+
   print(obj);
 
   return 0;

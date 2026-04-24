@@ -18,6 +18,63 @@ bool is_json_whitespace(char ch) {
   return ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t';
 }
 
+bool is_hex_digit(char ch) {
+  return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
+         (ch >= 'A' && ch <= 'F');
+}
+
+unsigned hex_value(char ch) {
+  if (ch >= '0' && ch <= '9') {
+    return static_cast<unsigned>(ch - '0');
+  }
+  if (ch >= 'a' && ch <= 'f') {
+    return static_cast<unsigned>(10 + ch - 'a');
+  }
+  return static_cast<unsigned>(10 + ch - 'A');
+}
+
+bool parse_u4(std::string_view json, size_t start, unsigned &value) {
+  if (start + 4 > json.size()) {
+    return false;
+  }
+
+  value = 0;
+  for (size_t j = 0; j < 4; ++j) {
+    char ch = json[start + j];
+    if (!is_hex_digit(ch)) {
+      return false;
+    }
+    value = (value << 4U) | hex_value(ch);
+  }
+
+  return true;
+}
+
+void append_utf8(std::string &out, unsigned codepoint) {
+  if (codepoint <= 0x7FU) {
+    out.push_back(static_cast<char>(codepoint));
+    return;
+  }
+
+  if (codepoint <= 0x7FFU) {
+    out.push_back(static_cast<char>(0xC0U | (codepoint >> 6U)));
+    out.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    return;
+  }
+
+  if (codepoint <= 0xFFFFU) {
+    out.push_back(static_cast<char>(0xE0U | (codepoint >> 12U)));
+    out.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+    out.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+    return;
+  }
+
+  out.push_back(static_cast<char>(0xF0U | (codepoint >> 18U)));
+  out.push_back(static_cast<char>(0x80U | ((codepoint >> 12U) & 0x3FU)));
+  out.push_back(static_cast<char>(0x80U | ((codepoint >> 6U) & 0x3FU)));
+  out.push_back(static_cast<char>(0x80U | (codepoint & 0x3FU)));
+}
+
 } // namespace
 
 std::pair<JSONObject, size_t> parse(std::string_view json) {
@@ -88,13 +145,87 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
           i++;
           closed = true;
           break;
+        } else if (static_cast<unsigned char>(ch) < 0x20U) {
+          return {JSONObject{std::nullptr_t{}}, 0};
         } else {
           str += ch;
         }
       }
 
       if (phase == Esc) {
-        str += unescaped_char(ch);
+        if (ch == '"' || ch == '\\' || ch == '/') {
+          str += ch;
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 'b') {
+          str += '\b';
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 'f') {
+          str += '\f';
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 'n') {
+          str += '\n';
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 'r') {
+          str += '\r';
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 't') {
+          str += '\t';
+          phase = Raw;
+          continue;
+        }
+
+        if (ch == 'u') {
+          unsigned first = 0;
+          if (!parse_u4(json, i + 1, first)) {
+            return {JSONObject{std::nullptr_t{}}, 0};
+          }
+
+          if (first >= 0xD800U && first <= 0xDBFFU) {
+            if (i + 10 >= json.size() || json[i + 5] != '\\' ||
+                json[i + 6] != 'u') {
+              return {JSONObject{std::nullptr_t{}}, 0};
+            }
+
+            unsigned second = 0;
+            if (!parse_u4(json, i + 7, second) || second < 0xDC00U ||
+                second > 0xDFFFU) {
+              return {JSONObject{std::nullptr_t{}}, 0};
+            }
+
+            unsigned codepoint =
+                0x10000U + (((first - 0xD800U) << 10U) | (second - 0xDC00U));
+            append_utf8(str, codepoint);
+            i += 10;
+            phase = Raw;
+            continue;
+          }
+
+          if (first >= 0xDC00U && first <= 0xDFFFU) {
+            return {JSONObject{std::nullptr_t{}}, 0};
+          }
+
+          append_utf8(str, first);
+          i += 4;
+          phase = Raw;
+          continue;
+        }
+
+        return {JSONObject{std::nullptr_t{}}, 0};
         phase = Raw;
       }
     }
